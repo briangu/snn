@@ -1,17 +1,19 @@
 
+#define MIN(a,b) (a < b ? a : b)
 
 typedef char byte;
 
+#define MAX_BYTE (0xFF)
+
 #define IS_BIT_SET(b, pos) ((b >> pos) & 1)
+#define IS_BIT_CLR(b, pos) (~(b >> pos) & 1)
+
 #define SET_BIT(b, pos) ((b >> pos) & 1)
 #define CLR_BIT(b, pos) ((b >> pos) & 1)
-
-#define RAND_THRES(ps) ((byte)1)
 
 // the minimum membrane potential is 0 for all neurons and thus does not require memory storage. 
 #define MIN_THRES ((byte)0)
 #define LEAKAGE ((byte)1)
-
 
 typedef struct {
   // The output (1 = spike; 0 = no spike) of the 8 neurons is stored in byte OUTPS 
@@ -36,15 +38,27 @@ typedef struct {
   byte iconn[8];
 } Config;
 
-void reset() {
-  thres = 0;
-  inps = 0;
-  outps = 0;
-  sign = 0;
+#define RAND_THRES(ps) ((byte)1)
+
+#define ICONN(c, i) (c->iconn[i])
+#define NCONN(c, i) (c->nconn[i])
+#define SIGN(c, i) (c->sign)
+#define THRES(c, i) (c->thres)
+
+void resetState(State *pState) {
+  pState->inps = 0;
+  pState->outps = 0;
   for (int i = 0; i < 8; i++) {
-    memb[i] = 0;
-    nconn[i] = 0;
-    iconn[i] = 0;
+    pState->memb[i] = 0;
+  }
+}
+
+void resetConfig(Config *pConfig) {
+  pConfig->thres = 0;
+  pConfig->sign = 0;
+  for (int i = 0; i < 8; i++) {
+    pConfig->nconn[i] = 0;
+    pConfig->iconn[i] = 0;
   }
 }
 
@@ -57,20 +71,18 @@ byte popCount(byte b) {
   return count;
 }
 
-void update(State* pState) {
+void update(State *pState, Config *pConfig) {
   // for each neuron
   for (int i = 0; i < 8; i++) {
     // step 1
-    if (!IN_REFACTORY_PERIOD(pState, )) {
+    if (IS_BIT_CLR(pState->outps, i)) {
       // step 2
-      for (int j = 0; j < 8; j++) {
-        byte activeInps = popCount(inps & pState->iconn[i]);
-        byte activeOutps = pstate->outps & pState->nconn[i];
-        byte posMemb = popCount(activeOutps & pState->sign);
-        byte negMemb = popCount(activeOutps & ~(pState->sign));
-        pState->memb[i] += activeInps + posMemb;
-        pState->memb[i] = negMemb >= pState->memb[i] ? 0 : pState->memb[i] - negMemb;
-      }
+      byte activeInps = popCount(pState->inps & ICONN(pConfig, i));
+      byte activeOutps = pState->outps & NCONN(pConfig, i);
+      byte posMemb = popCount(activeOutps & SIGN(pConfig, i));
+      byte negMemb = popCount(activeOutps & ~SIGN(pConfig, i));
+      pState->memb[i] += MIN(MAX_BYTE - pState->memb[i], activeInps + posMemb);
+      pState->memb[i] -= MIN(pState->memb[i], negMemb);
     }
     // step 3
     if (pState->memb[i] >= RAND_THRES(pState->thres)) {
