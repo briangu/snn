@@ -8,8 +8,8 @@ typedef char byte;
 #define IS_BIT_SET(b, pos) ((b >> pos) & 1)
 #define IS_BIT_CLR(b, pos) (~(b >> pos) & 1)
 
-#define SET_BIT(b, pos) ((b >> pos) & 1)
-#define CLR_BIT(b, pos) ((b >> pos) & 1)
+#define SET_BIT(b, pos) (b |= (0x1 << pos))
+#define CLR_BIT(b, pos) (b &= ~(0x1 << pos))
 
 // the minimum membrane potential is 0 for all neurons and thus does not require memory storage. 
 #define MIN_THRES ((byte)0)
@@ -71,31 +71,45 @@ byte popCount(byte b) {
   return count;
 }
 
+void updateMembrane(State *pState, Config *pConfig, int i) {
+  byte activeInps = popCount(pState->inps & ICONN(pConfig, i));
+  byte activeOutps = pState->outps & NCONN(pConfig, i);
+  byte posMemb = popCount(activeOutps & SIGN(pConfig, i));
+  byte negMemb = popCount(activeOutps & ~SIGN(pConfig, i));
+  pState->memb[i] += MIN(MAX_BYTE - pState->memb[i], activeInps + posMemb);
+  pState->memb[i] -= MIN(pState->memb[i], negMemb);
+}
+
+void applyThreshold(State *pState, int i, byte thres, byte *tmp_outps) {
+  if (pState->memb[i] >= thres) {
+    SET_BIT(*tmp_outps, i);
+    pState->memb[i] = 0;
+  }
+}
+
+void applyLeakage(State *pState, int i, byte leakage) {
+  if (pState->memb[i] >= leakage) {
+    pState->memb[i] -= leakage;
+  }
+}
+
 void update(State *pState, Config *pConfig) {
-  // for each neuron
+  byte tmp_outps = 0;
+
   for (int i = 0; i < 8; i++) {
-    // step 1
+    // step 1 (if not just fired, update membrane)
     if (IS_BIT_CLR(pState->outps, i)) {
       // step 2
-      byte activeInps = popCount(pState->inps & ICONN(pConfig, i));
-      byte activeOutps = pState->outps & NCONN(pConfig, i);
-      byte posMemb = popCount(activeOutps & SIGN(pConfig, i));
-      byte negMemb = popCount(activeOutps & ~SIGN(pConfig, i));
-      pState->memb[i] += MIN(MAX_BYTE - pState->memb[i], activeInps + posMemb);
-      pState->memb[i] -= MIN(pState->memb[i], negMemb);
+      updateMembrane(pState, pConfig, i);
     }
+
     // step 3
-    if (pState->memb[i] >= RAND_THRES(pState->thres)) {
-      SET_BIT(pState->outps, i);
-      pState->memb[i] = 0;
-    } else {
-      CLR_BIT(pState->outps, i);
-    }
+    applyThreshold(pState, i, RAND_THRES(pConfig->thres), &tmp_outps);
     // step 4
-    if (pState->memb[i] >= LEAKAGE) {
-      pState->memb[i] -= LEAKAGE;
-    }
+    applyLeakage(pState, i, LEAKAGE);
   }
+
+  pState->outps = tmp_outps;
 }
 
 int main(int argc, char** argv) {
