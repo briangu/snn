@@ -1,7 +1,9 @@
+#include <assert.h>
+#include <stdio.h>
 
 #define MIN(a,b) (a < b ? a : b)
 
-typedef char byte;
+typedef unsigned char byte;
 
 #define MAX_BYTE (0xFF)
 
@@ -63,12 +65,13 @@ void resetConfig(Config *pConfig) {
 }
 
 byte popCount(byte b) {
-  byte count = 0;
-  while (b) {
-    count++;
-    b >>= 1;
-  }
-  return count;
+  return __builtin_popcount(b);
+//  byte count = 0;
+//  while (b) {
+//    count++;
+//   b >>= 1;
+//  }
+//  return count;
 }
 
 void updateMembrane(State *pState, Config *pConfig, int i) {
@@ -84,6 +87,8 @@ void applyThreshold(State *pState, int i, byte thres, byte *tmp_outps) {
   if (pState->memb[i] >= thres) {
     SET_BIT(*tmp_outps, i);
     pState->memb[i] = 0;
+  } else {
+    CLR_BIT(*tmp_outps, i);
   }
 }
 
@@ -112,6 +117,159 @@ void update(State *pState, Config *pConfig) {
   pState->outps = tmp_outps;
 }
 
+void runSimulation() {
+  Config config;
+  State state;
+
+  resetState(&state);
+  resetConfig(&config);
+
+  update(&state, &config);
+}
+
+void testUpdateMembrane() {
+  Config config;
+  State state;
+
+  for (int i = 0; i < 8; i++) {
+    resetState(&state);
+    resetConfig(&config);
+    updateMembrane(&state, &config, i);
+    assert(state.memb[i] == 0);    
+
+    resetState(&state);
+    resetConfig(&config);
+    config.iconn[i] = 0xFF;
+    config.nconn[i] = 0xFF;
+    config.sign = 0xAA;
+    state.inps = 0;
+    state.outps = 0xFF;
+
+    updateMembrane(&state, &config, i);
+    assert(state.memb[i] == 0);
+
+    resetState(&state);
+    resetConfig(&config);
+    config.iconn[i] = 0xFF;
+    config.nconn[i] = 0xFF;
+    config.sign = 0xAA;
+    state.inps = 0xFF;
+    state.outps = 0x00;
+
+    updateMembrane(&state, &config, i);
+    assert(state.memb[i] == 8);
+
+    resetState(&state);
+    resetConfig(&config);
+    config.iconn[i] = 0xFF;
+    config.nconn[i] = 0xFF;
+    config.sign = 0xAA;
+    state.inps = 0xFF;
+    state.outps = 0xFF;
+
+    updateMembrane(&state, &config, i);
+    assert(state.memb[i] == 8);
+    updateMembrane(&state, &config, i);
+    assert(state.memb[i] == 16);
+
+    resetState(&state);
+    resetConfig(&config);
+    config.iconn[i] = 0xFF;
+    config.nconn[i] = 0xFF;
+    config.sign = 0xAA;
+    state.inps = 0xFF;
+    state.outps = (byte)~(0xAA);
+
+    updateMembrane(&state, &config, i);
+    assert(state.memb[i] == 4);
+  }
+}
+
+void testApplyThreshold() {
+  State state;
+
+  resetState(&state);
+
+  for (int i = 0; i < 8; i++) {
+    byte tmp_outps = 0;
+    applyThreshold(&state, i, 0, &tmp_outps);
+    assert(IS_BIT_SET(tmp_outps, i));
+
+    applyThreshold(&state, i, 10, &tmp_outps);
+    assert(IS_BIT_CLR(tmp_outps, i));
+
+    state.memb[i] = 10;
+    applyThreshold(&state, i, 10, &tmp_outps);
+    assert(IS_BIT_SET(tmp_outps, i));
+  }
+}
+
+void testApplyLeakage() {
+  State state;
+
+  resetState(&state);
+
+  for (int i = 0; i < 8; i++) {
+    assert(state.memb[i] == 0);
+    applyLeakage(&state, i, 1);
+    assert(state.memb[i] == 0);
+
+    state.memb[i] = 10;
+    applyLeakage(&state, i, 1);
+    assert(state.memb[i] == 9);
+  }
+}
+
+void testUpdate() {
+  testApplyThreshold();
+  testApplyLeakage();
+  testUpdateMembrane();
+}
+
+void testBitSet() {
+  byte b = 0;
+
+  for (int i = 0; i < 8; i++) {
+    assert(!IS_BIT_SET(b, i));
+    assert(IS_BIT_CLR(b, i));
+    SET_BIT(b, i);
+    assert(IS_BIT_SET(b, i));
+    assert(!IS_BIT_CLR(b, i));
+    CLR_BIT(b, i);
+    assert(!IS_BIT_SET(b, i));
+    assert(IS_BIT_CLR(b, i));
+  }
+}
+
+void testPopCount() {
+  byte b = 0;
+  assert(popCount(b) == 0);
+
+  for (int i = 0; i < 8; i++) {
+    b = 0;
+    SET_BIT(b, i);
+    assert(popCount(b) == 1);
+  }
+}
+
+void test() {
+  testBitSet();
+  testPopCount();
+  testUpdate();
+}
+
 int main(int argc, char** argv) {
+  test();
+
+  // Config config;
+  // State state;
+
+  // resetState(&state);
+  // resetConfig(&config);
+
+  // for (int i = 0; i < 1000; i++) {
+  //   update(&state, &config);
+  // }
+  
   return 0;
 }
