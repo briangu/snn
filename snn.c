@@ -40,7 +40,7 @@ typedef struct {
   byte iconn[8];
 } Config;
 
-#define RAND_THRES(ps) ((byte)1)
+#define RAND_THRES(th) ((byte)th)
 
 #define ICONN(c, i) (c->iconn[i])
 #define NCONN(c, i) (c->nconn[i])
@@ -55,12 +55,26 @@ void resetState(State *pState) {
   }
 }
 
+void printState(State *pState) {
+  printf("outps: %2x inps:%2x\n", pState->outps, pState->inps);
+  for (int i = 0; i < 8; i++) {
+    printf("memb[%d]: %2x ", i, pState->memb[i]);
+  }
+  printf("\n");
+}
+
 void resetConfig(Config *pConfig) {
   pConfig->thres = 0;
   pConfig->sign = 0;
   for (int i = 0; i < 8; i++) {
     pConfig->nconn[i] = 0;
     pConfig->iconn[i] = 0;
+  }
+}
+
+void printConfig(Config *config) {
+  for (int i = 0; i < 8; i++) {
+    printf("thres: %2x sign:%2x iconn: %2x nconn: %2x\n", THRES(config, i), SIGN(config, i), ICONN(config, i), NCONN(config, i));
   }
 }
 
@@ -115,16 +129,6 @@ void update(State *pState, Config *pConfig) {
   }
 
   pState->outps = tmp_outps;
-}
-
-void runSimulation() {
-  Config config;
-  State state;
-
-  resetState(&state);
-  resetConfig(&config);
-
-  update(&state, &config);
 }
 
 void testUpdateMembrane() {
@@ -258,18 +262,61 @@ void test() {
   testUpdate();
 }
 
+
+double evaluate(Config *pConfig) {
+  return 0.0;
+}
+
+void evolve(int kPopulationCount, Config population[kPopulationCount], int parentIdx) {
+
+}
+
+Config runSimulation(int kPopulationCount, int kGenerations) {
+  Config population[kPopulationCount];
+  State state;
+
+  for (int i = 0; i < kPopulationCount; i++) {
+    resetConfig(&population[i]);
+    population[i].thres = 100;
+  }
+
+  double bestScore = 0.0;
+  int bestIndex = -1;
+
+  for (int g = 0; g < kGenerations; g++) {
+    bestScore = 0.0;
+    bestIndex = -1;
+
+    for (int i = 0; i < kPopulationCount; i++) {
+      resetState(&state);
+      for (int t = 0; t < 100; t++) {
+        update(&state, &population[i]);
+        double score = evaluate(&population[i]);
+        if (score > bestScore) {
+          bestScore = score;
+          bestIndex = i;
+        }
+      }
+    }
+
+    bestIndex = bestIndex < 0 ? 0 : bestIndex;
+
+    evolve(kPopulationCount, population, bestIndex);
+  }
+
+  bestIndex = bestIndex < 0 ? 0 : bestIndex;
+
+  printf("bestScore %f bestIndex: %d\n", bestScore, bestIndex);
+  printConfig(&population[bestIndex]);
+
+  return population[bestIndex];
+}
+
 int main(int argc, char** argv) {
   test();
 
-  // Config config;
-  // State state;
+  Config best = runSimulation(10, 100);
+  printConfig(&best);
 
-  // resetState(&state);
-  // resetConfig(&config);
-
-  // for (int i = 0; i < 1000; i++) {
-  //   update(&state, &config);
-  // }
-  
   return 0;
 }
