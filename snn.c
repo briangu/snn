@@ -1,5 +1,7 @@
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h> 
+#include <time.h>
 
 #define MIN(a,b) (a < b ? a : b)
 
@@ -16,6 +18,7 @@ typedef unsigned char byte;
 // the minimum membrane potential is 0 for all neurons and thus does not require memory storage. 
 #define MIN_THRES ((byte)0)
 #define LEAKAGE ((byte)1)
+#define RAND_THRES_MARGIN ((byte)3)
 
 typedef struct {
   // The output (1 = spike; 0 = no spike) of the 8 neurons is stored in byte OUTPS 
@@ -40,12 +43,20 @@ typedef struct {
   byte iconn[8];
 } Config;
 
-#define RAND_THRES(th) ((byte)th)
-
 #define ICONN(c, i) (c->iconn[i])
 #define NCONN(c, i) (c->nconn[i])
 #define SIGN(c, i) (c->sign)
 #define THRES(c, i) (c->thres)
+
+byte randOffset(byte thres, byte margin) {
+  int k = (rand() % (2 * margin)) - margin;
+  return (byte)(k < 0 ? thres - MIN(thres, k) : thres + MIN(MAX_BYTE - thres, k));
+}
+
+byte randBit(byte b) {
+  int pos = rand() % 8;
+  return (IS_BIT_SET(b, pos)) ? CLR_BIT(b, pos) : SET_BIT(b, pos);
+}
 
 void resetState(State *pState) {
   pState->inps = 0;
@@ -123,7 +134,7 @@ void update(State *pState, Config *pConfig) {
     }
 
     // step 3
-    applyThreshold(pState, i, RAND_THRES(pConfig->thres), &tmp_outps);
+    applyThreshold(pState, i, randOffset(pConfig->thres, RAND_THRES_MARGIN), &tmp_outps);
     // step 4
     applyLeakage(pState, i, LEAKAGE);
   }
@@ -263,21 +274,59 @@ void test() {
 }
 
 
-double evaluate(Config *pConfig) {
-  return 0.0;
+double evaluate(State *pState, Config *pConfig) {
+  return popCount(pState->outps);
 }
 
-void evolve(int kPopulationCount, Config population[kPopulationCount], int parentIdx) {
-
+void evolveConfig(Config *pSource, Config *pChild) {
+  int pos;
+  *pChild = *pSource;
+  switch (rand() % 4) {
+    case 0:
+      pChild->thres = randOffset(pChild->thres, 4);
+      break;
+    case 1:
+      pChild->sign = randBit(pChild->sign);
+      break;
+    case 2: 
+      pos = rand() % 8;
+      pChild->iconn[pos] = randBit(pChild->iconn[pos]);
+      break;
+    case 3:
+      pos = rand() % 8;
+      pChild->nconn[pos] = randBit(pChild->iconn[pos]);
+      break;
+    default:
+      break;
+  }
 }
 
-Config runSimulation(int kPopulationCount, int kGenerations) {
+void evolvePopulation(int kPopulationCount, Config population[kPopulationCount], int parentIdx) {
+  for (int i = 0; i < kPopulationCount; i++) {
+    if (i != parentIdx) {
+      evolveConfig(&population[parentIdx], &population[i]);
+    }
+  }
+}
+
+void initRandomConfig(Config *pConfig) {
+  resetConfig(pConfig);
+  pConfig->thres = rand() % MAX_BYTE;
+  pConfig->sign = rand() % MAX_BYTE;
+  for (int i = 0; i < 8; i++) {
+    pConfig->iconn[i] = rand() % MAX_BYTE;
+    pConfig->nconn[i] = rand() % MAX_BYTE;
+  }
+}
+
+Config runSimulation(int kPopulationCount, int kGenerations, int seed) {
   Config population[kPopulationCount];
   State state;
 
+  srand(seed);
+
   for (int i = 0; i < kPopulationCount; i++) {
-    resetConfig(&population[i]);
-    population[i].thres = 100;
+    initRandomConfig(&population[i]);
   }
 
   double bestScore = 0.0;
@@ -289,19 +338,21 @@ Config runSimulation(int kPopulationCount, int kGenerations) {
 
     for (int i = 0; i < kPopulationCount; i++) {
       resetState(&state);
+      state.inps = 0xFF;
       for (int t = 0; t < 100; t++) {
         update(&state, &population[i]);
-        double score = evaluate(&population[i]);
+        double score = evaluate(&state, &population[i]);
         if (score > bestScore) {
           bestScore = score;
           bestIndex = i;
         }
       }
+      // printState(&state);
     }
 
     bestIndex = bestIndex < 0 ? 0 : bestIndex;
 
-    evolve(kPopulationCount, population, bestIndex);
+    evolvePopulation(kPopulationCount, population, bestIndex);
   }
 
   bestIndex = bestIndex < 0 ? 0 : bestIndex;
@@ -315,7 +366,7 @@ Config runSimulation(int kPopulationCount, int kGenerations) {
 int main(int argc, char** argv) {
   test();
 
-  Config best = runSimulation(10, 100);
+  Config best = runSimulation(10, 10000, time(0));
   printConfig(&best);
 
   return 0;
