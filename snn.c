@@ -3,6 +3,7 @@
 #include <stdlib.h> 
 #include <time.h>
 
+#define MAX(a,b) (a > b ? a : b)
 #define MIN(a,b) (a < b ? a : b)
 
 typedef unsigned char byte;
@@ -49,7 +50,7 @@ typedef struct {
 #define THRES(c, i) (c->thres)
 
 byte randOffset(byte thres, byte margin) {
-  int k = (rand() % (2 * margin)) - margin;
+  int k = MAX((rand() % MAX(1, (2 * margin))) - margin, 1);
   return (byte)(k < 0 ? thres - MIN(thres, k) : thres + MIN(MAX_BYTE - thres, k));
 }
 
@@ -283,7 +284,7 @@ void evolveConfig(Config *pSource, Config *pChild) {
   *pChild = *pSource;
   switch (rand() % 4) {
     case 0:
-      pChild->thres = randOffset(pChild->thres, 4);
+      pChild->thres = randBit(pChild->thres); //randOffset(pChild->thres, pChild->thres / 2);
       break;
     case 1:
       pChild->sign = randBit(pChild->sign);
@@ -294,7 +295,7 @@ void evolveConfig(Config *pSource, Config *pChild) {
       break;
     case 3:
       pos = rand() % 8;
-      pChild->nconn[pos] = randBit(pChild->iconn[pos]);
+      pChild->nconn[pos] = randBit(pChild->nconn[pos]);
       break;
     default:
       break;
@@ -319,7 +320,7 @@ void initRandomConfig(Config *pConfig) {
   }
 }
 
-Config runSimulation(int kPopulationCount, int kGenerations, int seed) {
+Config runSimulation(int kPopulationCount, int kGenerations, int stepsWithoutChange, int seed) {
   Config population[kPopulationCount];
   State state;
 
@@ -331,10 +332,12 @@ Config runSimulation(int kPopulationCount, int kGenerations, int seed) {
 
   double bestScore = 0.0;
   int bestIndex = -1;
+  int stepsSinceChange = 0;
 
-  for (int g = 0; g < kGenerations; g++) {
+  for (int g = 0; g < kGenerations && stepsSinceChange < stepsWithoutChange; g++) {
     bestScore = 0.0;
     bestIndex = -1;
+    stepsSinceChange++;
 
     for (int i = 0; i < kPopulationCount; i++) {
       resetState(&state);
@@ -345,6 +348,7 @@ Config runSimulation(int kPopulationCount, int kGenerations, int seed) {
         if (score > bestScore) {
           bestScore = score;
           bestIndex = i;
+          stepsSinceChange = 0;
         }
       }
       // printState(&state);
@@ -353,6 +357,10 @@ Config runSimulation(int kPopulationCount, int kGenerations, int seed) {
     bestIndex = bestIndex < 0 ? 0 : bestIndex;
 
     evolvePopulation(kPopulationCount, population, bestIndex);
+  }
+
+  if (stepsSinceChange >= stepsWithoutChange) {
+    printf("early termination due to stepsWithoutChange\n");
   }
 
   bestIndex = bestIndex < 0 ? 0 : bestIndex;
@@ -366,7 +374,7 @@ Config runSimulation(int kPopulationCount, int kGenerations, int seed) {
 int main(int argc, char** argv) {
   test();
 
-  Config best = runSimulation(10, 10000, time(0));
+  Config best = runSimulation(100, 10000, 10, time(0));
   printConfig(&best);
 
   return 0;
