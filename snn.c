@@ -284,7 +284,7 @@ void evolveConfig(Config *pSource, Config *pChild) {
   *pChild = *pSource;
   switch (rand() % 4) {
     case 0:
-      pChild->thres = randBit(pChild->thres); //randOffset(pChild->thres, pChild->thres / 2);
+      pChild->thres = randOffset(pChild->thres, MAX(pChild->thres / 4, 1));
       break;
     case 1:
       pChild->sign = randBit(pChild->sign);
@@ -320,7 +320,7 @@ void initRandomConfig(Config *pConfig) {
   }
 }
 
-Config runSimulation(int kPopulationCount, int kGenerations, int stepsWithoutChange, int seed) {
+Config runSimulation(int kPopulationCount, int kGenerations, int kEvaluationSteps, int seed) {
   Config population[kPopulationCount];
   State state;
 
@@ -332,23 +332,20 @@ Config runSimulation(int kPopulationCount, int kGenerations, int stepsWithoutCha
 
   double bestScore = 0.0;
   int bestIndex = -1;
-  int stepsSinceChange = 0;
 
-  for (int g = 0; g < kGenerations && stepsSinceChange < stepsWithoutChange; g++) {
+  for (int g = 0; g < kGenerations; g++) {
     bestScore = 0.0;
     bestIndex = -1;
-    stepsSinceChange++;
 
     for (int i = 0; i < kPopulationCount; i++) {
       resetState(&state);
       state.inps = 0xFF;
-      for (int t = 0; t < 100; t++) {
+      for (int t = 0; t < kEvaluationSteps; t++) {
         update(&state, &population[i]);
         double score = evaluate(&state, &population[i]);
         if (score > bestScore) {
           bestScore = score;
           bestIndex = i;
-          stepsSinceChange = 0;
         }
       }
       // printState(&state);
@@ -357,10 +354,6 @@ Config runSimulation(int kPopulationCount, int kGenerations, int stepsWithoutCha
     bestIndex = bestIndex < 0 ? 0 : bestIndex;
 
     evolvePopulation(kPopulationCount, population, bestIndex);
-  }
-
-  if (stepsSinceChange >= stepsWithoutChange) {
-    printf("early termination due to stepsWithoutChange\n");
   }
 
   bestIndex = bestIndex < 0 ? 0 : bestIndex;
@@ -374,7 +367,7 @@ Config runSimulation(int kPopulationCount, int kGenerations, int stepsWithoutCha
 int main(int argc, char** argv) {
   test();
 
-  Config best = runSimulation(100, 10000, 10, time(0));
+  Config best = runSimulation(100, 100, 100, time(0));
   printConfig(&best);
 
   return 0;
