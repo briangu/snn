@@ -31,6 +31,8 @@ typedef struct {
   byte memb[8];
 } State;
 
+typedef void (*state_inputs_fn)(State *);
+
 typedef struct {
   // The threshold is constant for all neurons and the stored in byte THRES;
   byte thres;
@@ -320,7 +322,11 @@ void initRandomConfig(Config *pConfig) {
   }
 }
 
-Config runSimulation(int kPopulationCount, int kGenerations, int kEvaluationSteps, int seed) {
+Config runSimulation(int kPopulationCount, 
+                     int kGenerations, 
+                     int kEvaluationSteps, 
+                     state_inputs_fn stateInputsFn,
+                     int seed) {
   Config population[kPopulationCount];
   State state;
 
@@ -338,8 +344,8 @@ Config runSimulation(int kPopulationCount, int kGenerations, int kEvaluationStep
     bestIndex = -1;
 
     for (int i = 0; i < kPopulationCount; i++) {
-      resetState(&state);
-      state.inps = 0xFF;
+      stateInputsFn(&state);
+
       for (int t = 0; t < kEvaluationSteps; t++) {
         update(&state, &population[i]);
         double score = evaluate(&state, &population[i]);
@@ -348,7 +354,6 @@ Config runSimulation(int kPopulationCount, int kGenerations, int kEvaluationStep
           bestIndex = i;
         }
       }
-      // printState(&state);
     }
 
     bestIndex = bestIndex < 0 ? 0 : bestIndex;
@@ -364,10 +369,15 @@ Config runSimulation(int kPopulationCount, int kGenerations, int kEvaluationStep
   return population[bestIndex];
 }
 
+void fixed_value_inputs(State *pState) {
+  resetState(pState);
+  pState->inps = 0xFF;
+}
+
 int main(int argc, char** argv) {
   test();
 
-  Config best = runSimulation(100, 100, 100, time(0));
+  Config best = runSimulation(100, 100, 100, &fixed_value_inputs, time(0));
   printConfig(&best);
 
   return 0;
